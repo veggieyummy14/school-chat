@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chat App</title>
+<title>Unblocked Chat</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 body { background-color: #121212; color: #fff; height: 100vh; display: flex; flex-direction: column; }
@@ -26,7 +26,7 @@ header { background: #1e1e1e; padding: 15px; text-align: center; font-weight: bo
 <body>
 
 <div id="setup-screen">
-<h2>Secure Chat</h2>
+<h2>Unblocked Chat</h2>
 <input type="text" id="username" placeholder="Your Name" />
 <input type="text" id="room-code" placeholder="Room Code (e.g. 1234)" />
 <button onclick="startChat()">Join Room</button>
@@ -42,14 +42,11 @@ header { background: #1e1e1e; padding: 15px; text-align: center; font-weight: bo
 </div>
 
 <script>
-// Relays over KV storage CDN that bypasses developer site filters
+const GOOGLE_SCRIPT_URL = "https://script.google.com/a/macros/students.bhasd.org/s/AKfycby9fPAIg9oW94XR4V-kuXkYky-ccnn4ILCIYRga091D3POndvMf__YU2kS1tWtaiFsjjA/exec";
+
 let myName = "";
 let roomCode = "";
 let lastMsgCount = 0;
-
-function getApiUrl() {
-return `https://kvdb.io/8x4Z9nQ7wE2kP5mL1s/room_${roomCode}`;
-}
 
 function startChat() {
 myName = document.getElementById("username").value.trim();
@@ -65,13 +62,12 @@ document.getElementById("chat-screen").style.display = "flex";
 document.getElementById("room-header").innerText = "Room: " + roomCode;
 
 fetchMessages();
-setInterval(fetchMessages, 1500);
+setInterval(fetchMessages, 2000);
 }
 
 async function fetchMessages() {
 try {
-const res = await fetch(getApiUrl());
-if (!res.ok) return;
+const res = await fetch(`${GOOGLE_SCRIPT_URL}?room=${roomCode}`);
 const allMessages = await res.json();
 
 if (Array.isArray(allMessages) && allMessages.length !== lastMsgCount) {
@@ -82,9 +78,7 @@ displayMessage(msg.sender, msg.text, msg.sender === myName);
 });
 lastMsgCount = allMessages.length;
 }
-} catch (err) {
-// Silent fail while waiting for room creation
-}
+} catch (err) {}
 }
 
 async function sendMessage() {
@@ -95,25 +89,16 @@ if (!text) return;
 input.value = "";
 
 try {
-let currentMsgs = [];
-try {
-const res = await fetch(getApiUrl());
-if (res.ok) currentMsgs = await res.json();
-} catch(e) {}
-
-if (!Array.isArray(currentMsgs)) currentMsgs = [];
-
-currentMsgs.push({ sender: myName, text: text, time: Date.now() });
-
-await fetch(getApiUrl(), {
+await fetch(GOOGLE_SCRIPT_URL, {
 method: "POST",
-headers: { "Content-Type": "application/json" },
-body: JSON.stringify(currentMsgs)
+mode: "no-cors",
+headers: { "Content-Type": "text/plain" },
+body: JSON.stringify({ room: roomCode, sender: myName, text: text })
 });
 
-fetchMessages();
+setTimeout(fetchMessages, 500);
 } catch (err) {
-alert("Unable to send message on this network.");
+alert("Message failed.");
 }
 }
 
