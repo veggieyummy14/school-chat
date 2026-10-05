@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Unblocked Web Chat</title>
+<title>Chat App</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 body { background-color: #121212; color: #fff; height: 100vh; display: flex; flex-direction: column; }
@@ -26,7 +26,7 @@ header { background: #1e1e1e; padding: 15px; text-align: center; font-weight: bo
 <body>
 
 <div id="setup-screen">
-<h2>HTTP Polling Chat</h2>
+<h2>Secure Chat</h2>
 <input type="text" id="username" placeholder="Your Name" />
 <input type="text" id="room-code" placeholder="Room Code (e.g. 1234)" />
 <button onclick="startChat()">Join Room</button>
@@ -42,17 +42,18 @@ header { background: #1e1e1e; padding: 15px; text-align: center; font-weight: bo
 </div>
 
 <script>
-// Public backend endpoint for polling
-const BIN_ID = "66f00000e41b4d34e435abcd";
-const API_URL = "https://api.jsonbin.io/v3/b/" + BIN_ID;
-
+// Relays over KV storage CDN that bypasses developer site filters
 let myName = "";
 let roomCode = "";
 let lastMsgCount = 0;
 
+function getApiUrl() {
+return `https://kvdb.io/8x4Z9nQ7wE2kP5mL1s/room_${roomCode}`;
+}
+
 function startChat() {
 myName = document.getElementById("username").value.trim();
-roomCode = document.getElementById("room-code").value.trim().toLowerCase();
+roomCode = document.getElementById("room-code").value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
 if (!myName || !roomCode) {
 alert("Please enter a name and room code.");
@@ -63,18 +64,17 @@ document.getElementById("setup-screen").style.display = "none";
 document.getElementById("chat-screen").style.display = "flex";
 document.getElementById("room-header").innerText = "Room: " + roomCode;
 
-// Poll for new messages every 1.5 seconds via standard HTTPS
 fetchMessages();
 setInterval(fetchMessages, 1500);
 }
 
 async function fetchMessages() {
 try {
-const res = await fetch(API_URL + "/latest", { cache: "no-store" });
-const data = await res.json();
-const allMessages = (data.record && data.record[roomCode]) ? data.record[roomCode] : [];
+const res = await fetch(getApiUrl());
+if (!res.ok) return;
+const allMessages = await res.json();
 
-if (allMessages.length !== lastMsgCount) {
+if (Array.isArray(allMessages) && allMessages.length !== lastMsgCount) {
 const container = document.getElementById("messages");
 container.innerHTML = "";
 allMessages.forEach(msg => {
@@ -83,7 +83,7 @@ displayMessage(msg.sender, msg.text, msg.sender === myName);
 lastMsgCount = allMessages.length;
 }
 } catch (err) {
-console.error("Polling error:", err);
+// Silent fail while waiting for room creation
 }
 }
 
@@ -95,23 +95,25 @@ if (!text) return;
 input.value = "";
 
 try {
-const res = await fetch(API_URL + "/latest", { cache: "no-store" });
-const data = await res.json();
-let record = data.record || {};
+let currentMsgs = [];
+try {
+const res = await fetch(getApiUrl());
+if (res.ok) currentMsgs = await res.json();
+} catch(e) {}
 
-if (!record[roomCode]) record[roomCode] = [];
+if (!Array.isArray(currentMsgs)) currentMsgs = [];
 
-record[roomCode].push({ sender: myName, text: text, time: Date.now() });
+currentMsgs.push({ sender: myName, text: text, time: Date.now() });
 
-await fetch(API_URL, {
-method: "PUT",
+await fetch(getApiUrl(), {
+method: "POST",
 headers: { "Content-Type": "application/json" },
-body: JSON.stringify(record)
+body: JSON.stringify(currentMsgs)
 });
 
 fetchMessages();
 } catch (err) {
-alert("Network error sending message.");
+alert("Unable to send message on this network.");
 }
 }
 
